@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+  # MinIO stopped publishing official images in 2025; Chainguard rebuilds the same server
+  # from upstream source. Pinned by digest because their free tier only offers :latest.
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:3c60a2a8c4d33409a9bc7a623a7fcbfb4605adc3d89422d2f53b3f673a6e5597
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MC_HOST_local: http://localhost:9000
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 10
+
+  # One-shot job: create the bucket MLflow stores model files in, then exit.
+  minio-init:
+    image: cgr.dev/chainguard/minio-client@sha256:1dccd2a6fd59914a98ac2d9dad95e552c91243cb0bd7242aaa224802df4b3432
+    depends_on:
+      minio: {condition: service_healthy}
+    command: mb --ignore-existing local/mlflow
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000
+
+  mlflow:
+    build: {context: ., dockerfile: docker/mlflow.Dockerfile}
+    # --serve-artifacts: clients upload/download through MLflow, so only MLflow needs MinIO keys.
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      --artifacts-destination s3://mlflow --serve-artifacts
+      --allowed-hosts "localhost:5000,mlflow:5000,localhost,mlflow"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    ports: ["5000:5000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      retries: 12
+
+  # Batch job, not a server: `docker compose run --rm trainer`. The profile keeps `up -d` from
+  # starting it.
+  trainer:
+    build: {context: ., dockerfile: docker/trainer.Dockerfile}
+    profiles: ["train"]
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      BINANCE_BASE_URL: ${BINANCE_BASE_URL:-https://api.binance.com}
+      GIT_PYTHON_REFRESH: quiet  # no git in the image; stops MLflow warning about it
+    depends_on:
+      mlflow: {condition: service_healthy}
+
+volumes:
+  pgdata:
+  miniodata:
