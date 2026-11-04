@@ -1,0 +1,30 @@
+[project]
+name = "mlops-crypto-volatility"
+version = "0.1.0"
+description = "Next-hour BTCUSDT volatility forecasting with an automated MLOps pipeline"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pandas",
+    "numpy",
+    "pyarrow",
+    "requests",
+    "scikit-learn",
+    "mlflow",
+    "fastapi",
+    "uvicorn",
+    "prometheus-client",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff", "httpx"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
