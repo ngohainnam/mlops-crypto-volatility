@@ -1,0 +1,56 @@
+{
+  "uid": "btc-volatility",
+  "title": "BTC volatility API",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": {"from": "now-30m", "to": "now"},
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Request rate (req/s)",
+      "gridPos": {"x": 0, "y": 0, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(prediction_requests_total[1m]))", "legendFormat": "all"},
+                  {"refId": "B", "expr": "sum by (endpoint) (rate(prediction_requests_total[1m]))", "legendFormat": "{{endpoint}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "p95 latency",
+      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(prediction_latency_seconds_bucket[5m])))", "legendFormat": "p95"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Champion model version",
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "model_version_info == 1", "legendFormat": "v{{version}}", "instant": true}],
+      "options": {"textMode": "name", "colorMode": "none", "graphMode": "none",
+                  "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Predicted next-hour volatility (latest)",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 9},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "predicted_volatility", "legendFormat": "predicted"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Feature drift (PSI)  —  <0.1 stable, 0.1–0.2 moderate, >0.2 significant",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 9},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "feature_drift_psi", "legendFormat": "{{feature}}"}],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"thresholdsStyle": {"mode": "line+area"}},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "transparent", "value": null},
+            {"color": "orange", "value": 0.1},
+            {"color": "red", "value": 0.2}]}
+        },
+        "overrides": [{"matcher": {"id": "byName", "options": "overall"},
+                       "properties": [{"id": "custom.lineWidth", "value": 4}]}]
+      }
+    }
+  ]
+}
