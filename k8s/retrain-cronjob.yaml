@@ -1,0 +1,35 @@
+# Weekly retrain: fetch fresh klines, train, and let the promotion gate decide on `champion`.
+# The API polls MLflow and hot-swaps on its own, so this job never touches the API.
+# Manual run for demos: kubectl -n mlops create job retrain-now --from=cronjob/retrain
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: retrain
+  namespace: mlops
+spec:
+  schedule: "0 3 * * 1"  # Mondays 03:00
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid  # two trainers racing on the champion alias would be confusing
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      ttlSecondsAfterFinished: 604800  # keep a week of logs, then clean up
+      template:
+        metadata:
+          labels: {app: retrain}
+        spec:
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 1000}
+          containers:
+            - name: trainer
+              # shortcut: kind-loaded image from scripts/k8s-up.sh, refreshed only when that script reruns;
+              # switch to the GHCR trainer tag (bumped by CI) once retraining should follow main.
+              image: ghcr.io/ngohainnam/mlops-crypto-volatility-trainer:dev
+              imagePullPolicy: IfNotPresent
+              env:
+                - {name: MLFLOW_TRACKING_URI, value: http://mlflow:5000}
+                - {name: BINANCE_BASE_URL, value: https://api.binance.com}
+                - {name: GIT_PYTHON_REFRESH, value: quiet}

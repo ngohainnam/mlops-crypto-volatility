@@ -26,5 +26,6 @@ kubectl get ns argocd >/dev/null 2>&1 || kubectl create namespace argocd
 kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.6.1/manifests/install.yaml
 kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=5m
 kubectl apply -f k8s/argocd-app.yaml
+kubectl apply -f k8s/retrain-cronjob.yaml
 
 kubectl -n "$NS" get pods
