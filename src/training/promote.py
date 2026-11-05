@@ -27,7 +27,10 @@ def promote(client: MlflowClient, new_version: str, X_test: pd.DataFrame, y_test
     new_rmse = rmse(y_test, load_model(f"models:/{MODEL_NAME}/{new_version}").predict(X_test))
     try:
         champ = client.get_model_version_by_alias(MODEL_NAME, ALIAS).version
-    except MlflowException:
+    except MlflowException as e:
+        # Only "alias not found" means no champion; any other error (outage) must not skip the gate.
+        if e.error_code not in ("INVALID_PARAMETER_VALUE", "RESOURCE_DOES_NOT_EXIST"):
+            raise
         champ = None
 
     if champ is None:

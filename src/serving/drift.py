@@ -1,5 +1,6 @@
 """PSI drift: compare live feature values with the training distribution saved by the trainer."""
 
+import threading
 from collections import deque
 
 import numpy as np
@@ -23,8 +24,13 @@ class DriftMonitor:
         self.min_rows = min_rows  # PSI noise is ~(bins-1)/n: ~0.09 at 100 rows, ~12 at 1 row
         self.rows: deque[tuple[object, dict]] = deque(maxlen=window)
         self.keys: set = set()
+        self.lock = threading.Lock()  # handlers run on a threadpool, so add() and scores() overlap
 
     def add(self, row: dict[str, float], key: object | None = None) -> None:
+        with self.lock:
+            self._add(row, key)
+
+    def _add(self, row: dict[str, float], key: object | None) -> None:
         # Same candle predicted again (GET /predict polled often) must not be counted twice.
         if key is not None and key in self.keys:
             return
@@ -35,9 +41,11 @@ class DriftMonitor:
             self.keys.add(key)
 
     def scores(self) -> dict[str, float]:
-        if len(self.rows) < self.min_rows:
+        with self.lock:
+            rows = list(self.rows)
+        if len(rows) < self.min_rows:
             return {}
-        s = {f: psi(ref, np.array([r[f] for _, r in self.rows]))
+        s = {f: psi(ref, np.array([r[f] for _, r in rows]))
              for f, ref in self.reference.items()}
         s["overall"] = sum(s.values()) / len(s)
         return s

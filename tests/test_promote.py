@@ -3,7 +3,9 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
+import pytest
 from mlflow.exceptions import MlflowException
+from mlflow.protos.databricks_pb2 import INVALID_PARAMETER_VALUE
 
 from src.training.promote import ALIAS, MODEL_NAME, promote
 
@@ -26,7 +28,8 @@ class Stub:
 def make_client(champion_version="1"):
     client = MagicMock()
     if champion_version is None:
-        client.get_model_version_by_alias.side_effect = MlflowException("no alias")
+        client.get_model_version_by_alias.side_effect = MlflowException(
+            "Registered model alias champion not found.", error_code=INVALID_PARAMETER_VALUE)
     else:
         client.get_model_version_by_alias.return_value = SimpleNamespace(version=champion_version)
     return client
@@ -75,3 +78,11 @@ def test_both_scored_on_same_window():
     champ, chall = Stub([1, 2, 3]), Stub([1, 2, 3])
     promote(client, "2", X, Y, load_model=loader({uri("1"): champ, uri("2"): chall}))
     assert champ.seen is X and chall.seen is X
+
+
+def test_mlflow_outage_does_not_bypass_gate():
+    client = make_client()
+    client.get_model_version_by_alias.side_effect = MlflowException("503 from server")
+    with pytest.raises(MlflowException):
+        promote(client, "2", X, Y, load_model=loader({uri("2"): Stub([1, 2, 3])}))
+    client.set_registered_model_alias.assert_not_called()
