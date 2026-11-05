@@ -59,10 +59,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # One bump at a time: two parallel bumps edit the same line and the second one conflicts.
+    concurrency: {group: deploy, cancel-in-progress: false}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main       # latest main, not the pushed commit, so earlier bumps are already in
+          fetch-depth: 0  # full history for the ancestry check below
       - name: Bump API image tag
         run: |
+          # A newer code push has its own run that will deploy it; never roll back to this older SHA.
+          if git log --format=%an "${GITHUB_SHA}..HEAD" | grep -qv '^github-actions\[bot\]$'; then
+            echo "Newer commits on main; skipping bump for ${GITHUB_SHA}"; exit 0
+          fi
           sed -i "s/^  tag: .*/  tag: ${GITHUB_SHA}/" helm/api/values.yaml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
