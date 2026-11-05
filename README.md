@@ -79,7 +79,7 @@ Requirements: [kind](https://kind.sigs.k8s.io/), kubectl, [Helm](https://helm.sh
 Charts: `helm/mlflow` (Postgres, MinIO, MLflow server) and `helm/api` (the prediction service), all in namespace `mlops`.
 
 ```bash
-./scripts/k8s-up.sh             # create cluster, build + load images, install both charts
+./scripts/k8s-up.sh             # create cluster, install MLflow chart, install ArgoCD + the API app
 
 # Train once inside the cluster (Stage B3 turns this into a weekly CronJob)
 kubectl -n mlops run trainer --rm -i --restart=Never \
@@ -92,6 +92,20 @@ kubectl -n mlops port-forward svc/mlflow 5001:5000   # MLflow UI at localhost:50
 ```
 
 Local ports 8001/5001 avoid clashing with the docker-compose stack. Delete everything with `kind delete cluster --name mlops`.
+
+### GitOps deploys (ArgoCD)
+
+The API is never installed by hand. On every push to `main`, CI builds and pushes the image tagged with the commit SHA,
+then commits that SHA into `helm/api/values.yaml` (`[skip ci]`). ArgoCD (`k8s/argocd-app.yaml`) polls Git about every
+3 minutes and rolls out the new pod. GitHub can't reach a laptop cluster, so the cluster pulls.
+
+```bash
+argocd admin dashboard -n argocd            # ArgoCD UI at localhost:8080, no login needed
+kubectl -n argocd get application api        # SYNC STATUS / HEALTH
+kubectl -n mlops get deploy api -o jsonpath='{..image}'   # the deployed tag
+```
+
+To change an API setting (for example `binanceBaseUrl`), edit `helm/api/values.yaml` and push. Rollback = `git revert` the tag bump.
 
 ## API
 
@@ -106,7 +120,6 @@ PSI guide: below 0.1 is stable, 0.1 to 0.2 is moderate, and above 0.2 is signifi
 
 ## Stage B: coming next
 
-- **GitOps:** ArgoCD pulls Helm changes from Git. CI bumps the image tag in `values.yaml`, so no `kubectl apply` is needed.
 - **Retraining:** a weekly Kubernetes CronJob (fetch, train, promote), which can also be triggered manually.
 - **Alerting:** kube-prometheus-stack, with Alertmanager sending drift (PSI above 0.2), latency (p95 above 500 ms) and API-down alerts to Discord.
 - **Failure drills:** reject a worse model, have Trivy block a vulnerable image, recover from a deleted pod, and fire a drift alert.

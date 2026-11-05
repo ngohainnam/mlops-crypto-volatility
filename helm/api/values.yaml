@@ -1,7 +1,7 @@
-# image.tag is the line CI rewrites in Stage B2 (GitOps). Locally it is the image loaded into kind.
+# image.tag is rewritten by CI (deploy job) to the commit SHA after each push; ArgoCD deploys it.
 image:
   repository: ghcr.io/ngohainnam/mlops-crypto-volatility-api
-  tag: dev
+  tag: 4dad91b7fc2d87950dc66587561a251ddfab4129
   pullPolicy: IfNotPresent
 
 replicas: 1

@@ -1,0 +1,23 @@
+# ArgoCD watches helm/api on main and keeps the cluster equal to it.
+# CI only commits a new image tag to Git; the cluster pulls the change (GitHub can't reach a laptop).
+# Applied once by scripts/k8s-up.sh; after that no kubectl apply is needed for the API.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: api
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ngohainnam/mlops-crypto-volatility.git
+    targetRevision: main
+    path: helm/api
+    helm:
+      releaseName: api
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mlops
+  syncPolicy:
+    automated:
+      prune: true     # delete resources removed from the chart
+      selfHeal: true  # undo manual kubectl edits, Git stays the source of truth

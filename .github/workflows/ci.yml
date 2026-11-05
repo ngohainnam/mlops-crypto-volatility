@@ -52,3 +52,21 @@ jobs:
           echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
+
+  # GitOps: write the new tag into Git; ArgoCD in the cluster pulls it. CI never touches the cluster.
+  deploy:
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Bump API image tag
+        run: |
+          sed -i "s/^  tag: .*/  tag: ${GITHUB_SHA}/" helm/api/values.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(deploy): api image ${GITHUB_SHA::7} [skip ci]"
+          # Another push may have landed while images built; rebase onto it before pushing.
+          git pull --rebase origin main
+          git push origin HEAD:main
