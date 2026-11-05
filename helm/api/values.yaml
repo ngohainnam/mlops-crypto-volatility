@@ -1,7 +1,7 @@
 # image.tag is rewritten by CI (deploy job) to the commit SHA after each push; ArgoCD deploys it.
 image:
   repository: ghcr.io/ngohainnam/mlops-crypto-volatility-api
-  tag: 1d40b59724549dfe52479adf290ee2f3d7aebcc2
+  tag: 372d92e242213e23ea7d49e798b2491f8839bf32
   pullPolicy: IfNotPresent
 
 replicas: 1
