@@ -1,0 +1,10 @@
+# image.tag is the line CI rewrites in Stage B2 (GitOps). Locally it is the image loaded into kind.
+image:
+  repository: ghcr.io/ngohainnam/mlops-crypto-volatility-api
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicas: 1
+mlflowUri: http://mlflow:5000
+binanceBaseUrl: https://api.binance.com
+modelPollSeconds: 300

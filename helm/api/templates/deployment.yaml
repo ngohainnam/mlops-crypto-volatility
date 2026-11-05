@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: {{ .Values.replicas }}
+  selector: {matchLabels: {app: api}}
+  template:
+    metadata:
+      labels: {app: api}
+      annotations:  # read by Prometheus in Stage B4
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - {name: MLFLOW_TRACKING_URI, value: {{ .Values.mlflowUri | quote }}}
+            - {name: BINANCE_BASE_URL, value: {{ .Values.binanceBaseUrl | quote }}}
+            - {name: MODEL_POLL_SECONDS, value: {{ .Values.modelPollSeconds | quote }}}
+            - {name: GIT_PYTHON_REFRESH, value: quiet}
+          ports: [{containerPort: 8000}]
+          # /health answers 200 even before a champion exists, so the pod stays up and keeps
+          # polling MLflow instead of restarting.
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 20
+            periodSeconds: 20

@@ -73,6 +73,26 @@ Stop the stack with `docker compose stop`. Use `docker compose down -v` only if 
 | http://localhost:3000 | Grafana (`admin` / `GF_SECURITY_ADMIN_PASSWORD`) |
 | http://localhost:9001 | MinIO console |
 
+## Run on Kubernetes (kind)
+
+Requirements: [kind](https://kind.sigs.k8s.io/), kubectl, [Helm](https://helm.sh/) and the `.env` from above.
+Charts: `helm/mlflow` (Postgres, MinIO, MLflow server) and `helm/api` (the prediction service), all in namespace `mlops`.
+
+```bash
+./scripts/k8s-up.sh             # create cluster, build + load images, install both charts
+
+# Train once inside the cluster (Stage B3 turns this into a weekly CronJob)
+kubectl -n mlops run trainer --rm -i --restart=Never \
+  --image=ghcr.io/ngohainnam/mlops-crypto-volatility-trainer:dev --image-pull-policy=IfNotPresent \
+  --env=MLFLOW_TRACKING_URI=http://mlflow:5000 --env=GIT_PYTHON_REFRESH=quiet
+kubectl -n mlops rollout restart deploy/api   # first run only, same reason as with compose
+
+kubectl -n mlops port-forward svc/api 8001:8000      # then: curl localhost:8001/predict
+kubectl -n mlops port-forward svc/mlflow 5001:5000   # MLflow UI at localhost:5001
+```
+
+Local ports 8001/5001 avoid clashing with the docker-compose stack. Delete everything with `kind delete cluster --name mlops`.
+
 ## API
 
 | Endpoint | Description |
@@ -86,7 +106,6 @@ PSI guide: below 0.1 is stable, 0.1 to 0.2 is moderate, and above 0.2 is signifi
 
 ## Stage B: coming next
 
-- **Kubernetes:** a local kind cluster, with Helm charts for the API and MLflow.
 - **GitOps:** ArgoCD pulls Helm changes from Git. CI bumps the image tag in `values.yaml`, so no `kubectl apply` is needed.
 - **Retraining:** a weekly Kubernetes CronJob (fetch, train, promote), which can also be triggered manually.
 - **Alerting:** kube-prometheus-stack, with Alertmanager sending drift (PSI above 0.2), latency (p95 above 500 ms) and API-down alerts to Discord.

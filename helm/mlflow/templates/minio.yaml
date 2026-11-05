@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: {{ .Values.storage.minio }}}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: minio}}
+  template:
+    metadata: {labels: {app: minio}}
+    spec:
+      securityContext: {fsGroup: 65532}  # Chainguard image runs as uid 65532; lets it write the volume
+      containers:
+        - name: minio
+          image: {{ .Values.images.minio }}
+          args: [server, /data, --console-address, ":9001"]
+          envFrom: [{secretRef: {name: mlflow-credentials}}]
+          env: [{name: MC_HOST_local, value: http://localhost:9000}]
+          ports: [{containerPort: 9000}, {containerPort: 9001}]
+          readinessProbe:
+            exec: {command: [mc, ready, local]}
+            periodSeconds: 5
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes: [{name: data, persistentVolumeClaim: {claimName: minio-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+spec:
+  selector: {app: minio}
+  ports: [{name: api, port: 9000}, {name: console, port: 9001}]

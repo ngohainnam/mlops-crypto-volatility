@@ -1,0 +1,19 @@
+# No passwords here: pass them at install time from .env (see scripts/k8s-up.sh).
+credentials:
+  postgresUser: mlflow
+  postgresPassword: ""
+  postgresDb: mlflow
+  minioUser: minio
+  minioPassword: ""
+
+images:
+  postgres: postgres:16-alpine
+  # Same Chainguard digests as docker-compose.yml (MinIO stopped publishing official images).
+  minio: cgr.dev/chainguard/minio@sha256:3c60a2a8c4d33409a9bc7a623a7fcbfb4605adc3d89422d2f53b3f673a6e5597
+  minioClient: cgr.dev/chainguard/minio-client@sha256:1dccd2a6fd59914a98ac2d9dad95e552c91243cb0bd7242aaa224802df4b3432
+  # Built from docker/mlflow.Dockerfile and loaded into kind (not pushed to a registry).
+  mlflow: mlops-mlflow:dev
+
+storage:
+  postgres: 1Gi
+  minio: 1Gi

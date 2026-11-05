@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mlflow}}
+  template:
+    metadata: {labels: {app: mlflow}}
+    spec:
+      # Replaces compose's one-shot minio-init: create the bucket before MLflow starts.
+      # If MinIO isn't up yet it fails and Kubernetes retries it, so no install ordering is needed.
+      # (The image has no shell, so this calls mc directly.)
+      initContainers:
+        - name: create-bucket
+          image: {{ .Values.images.minioClient }}
+          args: [mb, --ignore-existing, local/mlflow]
+          envFrom: [{secretRef: {name: mlflow-credentials}}]
+          env:
+            - {name: MC_HOST_local, value: "http://$(MINIO_ROOT_USER):$(MINIO_ROOT_PASSWORD)@minio:9000"}
+      containers:
+        - name: mlflow
+          image: {{ .Values.images.mlflow }}
+          imagePullPolicy: IfNotPresent
+          envFrom: [{secretRef: {name: mlflow-credentials}}]
+          env:
+            - {name: MLFLOW_S3_ENDPOINT_URL, value: http://minio:9000}
+            - {name: AWS_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: mlflow-credentials, key: MINIO_ROOT_USER}}}
+            - {name: AWS_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: mlflow-credentials, key: MINIO_ROOT_PASSWORD}}}
+          # $(VAR) is expanded by Kubernetes from the env above, so passwords stay in the Secret.
+          command:
+            - mlflow
+            - server
+            - --host=0.0.0.0
+            - --port=5000
+            - --backend-store-uri=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
+            - --artifacts-destination=s3://mlflow
+            - --serve-artifacts
+            # localhost:* = whatever local port you port-forward to; mlflow:5000 = in-cluster clients
+            - --allowed-hosts=localhost,localhost:*,mlflow,mlflow:5000
+          ports: [{containerPort: 5000}]
+          readinessProbe:
+            httpGet: {path: /health, port: 5000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 5000}
+            initialDelaySeconds: 60  # first start runs DB migrations
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+spec:
+  selector: {app: mlflow}
+  ports: [{port: 5000}]
