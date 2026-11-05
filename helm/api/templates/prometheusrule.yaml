@@ -1,0 +1,28 @@
+# Alerts for the API. notify=discord is what Alertmanager routes to Discord (k8s/monitoring-values.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: api
+spec:
+  groups:
+    - name: api
+      rules:
+        - alert: FeatureDriftHigh
+          expr: feature_drift_psi{feature="overall"} > 0.2
+          for: 10m
+          labels: {severity: warning, notify: discord}
+          annotations:
+            summary: "Overall feature PSI is {{ "{{" }} $value | printf \"%.2f\" {{ "}}" }} (> 0.2) - consider retraining"
+        - alert: PredictionLatencyHigh
+          expr: histogram_quantile(0.95, sum by (le) (rate(prediction_latency_seconds_bucket[5m]))) > 0.5
+          for: 5m
+          labels: {severity: warning, notify: discord}
+          annotations:
+            summary: "p95 prediction latency is {{ "{{" }} $value | humanizeDuration {{ "}}" }} (> 500ms)"
+        - alert: ApiDown
+          # absent(...== 1) also fires when the target vanished entirely (pod or Service gone).
+          expr: absent(up{job="api", namespace="mlops"} == 1)
+          for: 2m
+          labels: {severity: critical, notify: discord}
+          annotations:
+            summary: "Prediction API has not been scrapeable for 2 minutes"

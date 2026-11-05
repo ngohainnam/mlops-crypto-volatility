@@ -8,9 +8,6 @@ spec:
   template:
     metadata:
       labels: {app: api}
-      annotations:  # read by Prometheus in Stage B4
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8000"
     spec:
       containers:
         - name: api

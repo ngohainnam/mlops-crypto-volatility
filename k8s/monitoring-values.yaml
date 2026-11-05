@@ -1,0 +1,33 @@
+# Values for kube-prometheus-stack (release `kps`, namespace `monitoring`), installed by scripts/k8s-up.sh.
+# Only what differs from the chart defaults is here.
+
+prometheus:
+  prometheusSpec:
+    # Pick up every ServiceMonitor / PrometheusRule in the cluster, not only ones labelled release=kps,
+    # so the API chart doesn't need to know this release's name.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+grafana:
+  # Dashboards come from ConfigMaps labelled grafana_dashboard=1 (the chart's sidecar default);
+  # k8s-up.sh builds one from monitoring/grafana/dashboards/volatility.json.
+  sidecar:
+    dashboards:
+      searchNamespace: ALL
+
+alertmanager:
+  alertmanagerSpec:
+    # Mounted at /etc/alertmanager/secrets/alertmanager-discord/. Created from .env by k8s-up.sh.
+    secrets: [alertmanager-discord]
+  config:
+    route:
+      receiver: "null"  # cluster-internal alerts (Watchdog, kind's unscrapable etcd...) go nowhere
+      group_by: [alertname]
+      routes:
+        - receiver: discord
+          matchers: ['notify="discord"']  # set on the API's PrometheusRule
+    receivers:
+      - name: "null"
+      - name: discord
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager/secrets/alertmanager-discord/webhook-url

@@ -1,0 +1,9 @@
+# Tells the Prometheus Operator (kube-prometheus-stack) to scrape the API's /metrics every 15s.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api
+spec:
+  selector: {matchLabels: {app: api}}
+  endpoints:
+    - {port: http, path: /metrics, interval: 15s}
